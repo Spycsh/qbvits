@@ -1,0 +1,4 @@
+*.wav
+nc_workspace/
+vits_bert_cn/
+vits_int8/
