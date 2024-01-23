@@ -3,7 +3,7 @@ from intel_extension_for_transformers.neural_chat.pipeline.plugins.audio.tts_mul
 from transformers import AutoConfig
 
 # model loading
-t2s = MultilangTextToSpeech()
+t2s = MultilangTextToSpeech(device="cpu", precision="fp32")
 from transformers import BertForMaskedLM, DebertaV2Model
 bert_cn = BertForMaskedLM(config=AutoConfig.from_pretrained("hfl/chinese-roberta-wwm-ext-large"))
 t2s.bert_vits_model.cn_bert_model = load("vits_bert_cn/best_model.pt", bert_cn)

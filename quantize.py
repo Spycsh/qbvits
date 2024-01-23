@@ -13,7 +13,7 @@ parser.add_argument(
 args=parser.parse_args()
 
 # model loading
-t2s = MultilangTextToSpeech()
+t2s = MultilangTextToSpeech(device="cpu", precision="fp32")
 texts_cn = [
     '绿是阳春烟景，大块文章的底色，四月的林峦，更是绿得鲜活、秀媚、诗意盎然。',
     '他仅凭腰部的力量，在泳道上下翻腾，蛹动蛇行，状如海豚，一直以一头的优势领先。',
