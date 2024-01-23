@@ -45,6 +45,7 @@ if args.name == "vits":
     op_type_dict = {
             # q/dq 357+5+7=369
             # "Conv1d": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},   # 357
+            # These two op precision are critical to affect the result audio output existing/not
             "ConvTranspose1d": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},  # 5
             "Linear": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},   # 7
             # "Embedding": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},    # 4
@@ -52,8 +53,8 @@ if args.name == "vits":
 
     op_name_dict = {
         # "enc_p.*": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}}, # 36
-        "dec.resblocks.*": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},
-        "dec.ups.*": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}}, # 90 dec.resblocks.8.convs1.1.weight_g not enough
+        "dec.resblocks.*": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},  # extremely affect noise
+        "dec.ups.*": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},
         "dec.conv_pre.*": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},
         "dec.conv_post.*": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},
         "dec.cond.*": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},
@@ -75,7 +76,7 @@ if args.name == "vits":
     model.save(f"vits_int8")
 elif args.name == "vits_bert_cn":
     def calib_func_bert_cn(model):
-        for text in texts_cn[:1]:
+        for text in texts_cn[:1]:   # Few calibration is enough for quicker tuning
             t2s.text2speech(text, "tmp.wav")
 
     conf = PostTrainingQuantConfig()
@@ -86,12 +87,9 @@ elif args.name == "vits_bert_en":
     def calib_func_bert_en(model):
         for text in texts_en[:1]:
             t2s.text2speech(text, "tmp.wav")
+    # Fallback LayerNorm fp32 (still NotImplementedError: Could not run 'aten::native_batch_norm' with arguments from the 'QuantizedCPU' backend.)
     op_type_dict = {
-            # q/dq 357+5+7=369
-            # "Conv1d": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},   # 357
-            "LayerNorm": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},  # 5
-            # "Linear": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},   # 7
-            # "Embedding": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},    # 4
+            "LayerNorm": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},
             }
     conf = PostTrainingQuantConfig(
         approach="static",
