@@ -14,3 +14,5 @@ python quantize.py --name=vits_bert_cn
 python infer.py
 # python reduce_nosie.py
 ```
+
+For details, refer to this [PR](https://github.com/intel/intel-extension-for-transformers/pull/1139)
