@@ -1,5 +1,16 @@
 from neural_compressor import PostTrainingQuantConfig, quantization
 from intel_extension_for_transformers.neural_chat.pipeline.plugins.audio.tts_multilang import MultilangTextToSpeech
+import argparse
+
+
+parser=argparse.ArgumentParser()
+parser.add_argument(
+    '--name',
+    type=str,
+    default="vits",
+    help="model name, should be vits/vits_bert_cn/vits_bert_en/vits_bert_jp"
+)
+args=parser.parse_args()
 
 # model loading
 t2s = MultilangTextToSpeech()
@@ -21,36 +32,81 @@ texts_en = [
     "Build your chatbot within minutes on your favorite device; offer SOTA compression techniques for LLMs",
     "Intel has ceased development and contributions including, but not limited to, maintenance, bug fixes, new releases, or updates, to this project."
 ]
+texts_jp = [
+    "こんにちは",
+]
 
-# do quantize
-def calib_func_bert_cn(model):
-    for text in texts_cn[:1]:
-        t2s.text2speech(text, "tmp.wav")
+if args.name == "vits":
+    def calib_func_vits(model):
+        for text in texts_cn + texts_en:
+            t2s.text2speech(text, "tmp.wav")
 
-conf = PostTrainingQuantConfig(
-    # approach="dynamic",
-    # op_type_dict=op_type_dict
+    # This dict represents the ops that should not be quantized
+    op_type_dict = {
+            # q/dq 357+5+7=369
+            # "Conv1d": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},   # 357
+            "ConvTranspose1d": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},  # 5
+            "Linear": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},   # 7
+            # "Embedding": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},    # 4
+            }
+
+    op_name_dict = {
+        # "enc_p.*": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}}, # 36
+        "dec.resblocks.*": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},
+        "dec.ups.*": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}}, # 90 dec.resblocks.8.convs1.1.weight_g not enough
+        "dec.conv_pre.*": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},
+        "dec.conv_post.*": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},
+        "dec.cond.*": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},
+        # "dec.*": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},
+        # "flow.*": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}}, # 104
+        # "sdp.*": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},
+        # "sdp.post_flows.*": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},
+        # "sdp.convs.*": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},
+        # "sdp.post_convs.*": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},
+    }
+
+    conf = PostTrainingQuantConfig(
+        # approach="dynamic",
+        op_type_dict=op_type_dict,
+        op_name_dict=op_name_dict
+        )
+    model = quantization.fit(t2s.bert_vits_model.vits, conf, calib_func=calib_func_vits)
+
+    model.save(f"vits_int8")
+elif args.name == "vits_bert_cn":
+    def calib_func_bert_cn(model):
+        for text in texts_cn[:1]:
+            t2s.text2speech(text, "tmp.wav")
+
+    conf = PostTrainingQuantConfig()
+    model = quantization.fit(t2s.bert_vits_model.cn_bert_model, conf, calib_func=calib_func_bert_cn)
+    model.save(f"vits_bert_cn")
+elif args.name == "vits_bert_en":
+    # This will cause a aten::native_batch_norm error in the inference
+    def calib_func_bert_en(model):
+        for text in texts_en[:1]:
+            t2s.text2speech(text, "tmp.wav")
+    op_type_dict = {
+            # q/dq 357+5+7=369
+            # "Conv1d": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},   # 357
+            "LayerNorm": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},  # 5
+            # "Linear": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},   # 7
+            # "Embedding": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},    # 4
+            }
+    conf = PostTrainingQuantConfig(
+        approach="static",
+        op_type_dict=op_type_dict
     )
-model = quantization.fit(t2s.bert_vits_model.cn_bert_model, conf, calib_func=calib_func_bert_cn)
-model.save(f"vits_bert_cn")
+    model = quantization.fit(t2s.bert_vits_model.en_bert_model, conf, calib_func=calib_func_bert_en)
+    model.save(f"vits_bert_en")
+elif args.name == "vits_bert_jp":
+    # Cause Deberta error
+    def calib_func_bert_jp(model):
+        for text in texts_jp[:1]:
+            t2s.text2speech(text, "tmp.wav")
 
-
-def calib_func_vits(model):
-    for text in texts_cn + texts_en:
-        t2s.text2speech(text, "tmp.wav")
-
-op_type_dict = {
-        # q/dq 357+5+7=369
-        # "Conv1d": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},   # 357
-        "ConvTranspose1d": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},  # 5
-        "Linear": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},   # 7
-        # "Embedding": {"weight": {"dtype": ["fp32"]}, "activation": {"dtype": ["fp32"]}},    # 4
-        }
-
-conf = PostTrainingQuantConfig(
-    # approach="dynamic",
-    op_type_dict=op_type_dict
-    )
-model = quantization.fit(t2s.bert_vits_model.vits, conf, calib_func=calib_func_vits)
-
-model.save(f"vits_int8")
+    conf = PostTrainingQuantConfig()
+    model = quantization.fit(t2s.bert_vits_model.jp_bert_model, conf, calib_func=calib_func_bert_jp)
+    model.save(f"vits_bert_jp")
+else:
+    raise Exception("Check model name, should be: vits/vits_bert_cn/vits_bert_en/vits_bert_jp")
